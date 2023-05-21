@@ -1,0 +1,93 @@
+^main|develop|feature.*$ -> build branches (main , develop et feature avec n'importe quel caractère après feature , par contre les branches bug-fix ne seront pas concernées par ce build)
+build -> test -> déploiement
+
+Jenkinsfile :
+"pipeline" : must be top-level
+"agent" : where to execute
+"stages" : where the work happens
+
+Jenkinsfile -------------------------------
+pipeline{
+
+  agent any
+
+  stages{
+
+     stage("build"){
+
+	steps{
+		sh 'mvn -version'
+                sh 'mvn compile test package'
+                sh 'mv target/*.jar target/my-app.jar'
+	
+	}	
+     }
+
+     stage("test"){
+
+	steps{
+	
+	}	
+     }	
+
+     stage("deploy"){
+
+	steps{
+	
+	}	
+     }		
+
+
+  }	
+
+}
+
+node {
+	//groovy script
+}
+
+----------------------
+most of the configuartion will be done in Jenkinsfile or on the pipeline level in the configure
+On peut modifier Jenkinsfile directement par "historique des builds -> replay -> modifer le jenkinsfile" puis run sans passer par repo git puis commiter et rebuilder
+restart from stage (if one of the stages fails I can repeat only this stage , and it will skip the others stages)
+notified jenkins after every commit to scan the pipeline/builds the changes(trigger) 
+	1- Push notification
+	2- Polling
+
+------------------Build Triggers
+Pull SCM :	-> enable + * * * * *	in planning	(every minute detect changes from scm)
+
+------------------Target of artifact
+var/jenkins_home/workspace/testJenkins/target/......snapshot.jar
+
+-----------------Build jar
+java -Dserver.port=8888 -jar my-app.jar
+
+----------------------------
+docker run --rm -u root -d -p 8080:8080 -v jenkins-data:/var/jenkins_home -v myDocker:/usr/bin/docker -v /var/run/docker.sock:/var/run/docker.sock -v "home":/home jenkins/jenkins
+
+
+568c2841ad5d0833210400673642dedc9887d7e938f922ab594f87ef25b6f3
+
+
+(jenkinsDocker) 0c6a51968dfbc4b732ce55dc066deb181b8359f32023697e52946b61f99f53b8
+docker run --name jenkinsDocker -p 8098:8098  -d -v "home":/var/jenkins_home --privileged -v /var/run/docker.sock:/var/run/docker.sock bitnami/jenkins
+
+-------------------------------
+usermod -aG docker jenkins
+usermod -aG root jenkins
+chmod 777 /var/run/docker.sock
+
+
+------------------------ executer un container tant qu'Admin
+docker exec -it -u root 1c25ff13917e /bin/bash
+
+
+------------------------
+ec2-user@ec2-3-18-111-90.us-east-2.compute.amazonaws.com
+--------------------
+Pour changer le port dont Tomcat est runné vers 8090
+vi /opt/tomcat/conf/server.xml
+et changer <Connector port="8090"
+par la suite : wq
+restart tomcat

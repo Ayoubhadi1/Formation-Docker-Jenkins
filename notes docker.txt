@@ -1,0 +1,136 @@
+run as administrator -> bcdedit /set hypervisorlaunchtype auto
+docker pull -> pulls the image from the repository to local
+docker images -> check all the docker images existing on my laptop
+create a container of image(redis/mysql...) -> docker run redis (this will start the image in a container) //container is a running environment of an image
+docker ps -> list running containers
+docker ps -a  -> list running and stopped container 
+docker run -d redis -> make the container in a detached mode
+docker stop idContainer(stops the container)  / docker start idConayiner (starts stopped container )-> restart a container because some application crushed inside  
+docker run redis:4.0 -> pulls image and starts container
+docker run -d -p6001:6379 --name redis-older redis:4.0 -> run container with custom name / the name is generated randomly
+*run two different version of redis image , both of them bound to different ports on my laptop , and the containers listening to request on the same port
+docker run -p6000:6379 redis (6000 : host port , 6379 : container port) * start containers using the binding between the host and container ports : 
+docker run -p6000:6379 -d redis (same ,but in detached mode)
+docker run -p6001:6379 -d redis:4.0
+* if something goes wrong inside your container , you want to see the logs of the container (troubleshooting / dépannage)
+*docker logs idContainer / docker logs nameContainer
+docker exec -it idContainer /bin/bash  /  docker exec -it nameContainer /bin/bash (/bin/sh)-> command in debugging (get the terminal of a running container/navigate inside the container/interactive)
+root@idContainer:/data# (I am inside of container as user , cd / -> ls)
+env -> print environmental variables
+exit -> sortir du container
+* diffrence docker run / docker start
+docker run -> create a new container from an image
+docker start -> work with container and not image / to restart a stopped container 
+*docker network create mongo-network -> create your own network
+docker network ls -> list of docker networks
+*run the container inside of the network :
+	docker run -d 
+		   -p 27017:27017
+		   -e MONGO_INITDB_ROOT_USERNAME=admin
+		   -e MONGO_INTITDB_ROOT_PASSWORD=password
+		   --name mondb
+		   --net mongo-network
+		   mongo
+(username and password config is mentioned in how to use this image)
+*we want mongo express to connect to the running mongoDb container	
+docker run 	-d
+		-p 8081:8081  //it's going to run on our laptop on Port 8081
+		-e ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+		-e ME_CONFIG_MONGODB_ADMINPASSWORD=password
+		--net mongo-network
+		--name mongo-express
+		-e ME_CONFIG_MONGODB_SERVER=mongodb
+		mongo-express //image
+
+*docker-compose.yml
+--------------*mongo.yaml
+version: '3'
+services: 
+  mogodb: 
+    image: mongo
+    ports:  
+      -27017:27017
+    environment:
+      -MONGO_............
+      -.................
+  mongo-express:
+      .................	
+  my-app:
+    image: ............................amazonaws.com/my-app:1.0
+    ports:
+      - 3000:3000
+
+docker-compose -f mongo.yaml up	//start all the containers which are in the mongo.yaml + create also by default network
+docker-compose -f mongo.yaml down //stop containers in mongo.yaml + remove the network created
+*when you restart the container ,everything that you configured in that containers application is gone.So data is lost(docker volume for data persistence) 
+*build docker image from our application, and prepare it to be deployed on some environment   
+commit our application to the Git -> "continuous integration system = jenkins" builds the application + it packages it then in a docker image -> push it into a private docker repository
+we build a docker image from our application using Dockerfile
+
+-----------------//Dockerfile	(name of file)
+FROM node 			//node image that we can base our own image from
+RUN mkdir -p /home/app 		//when I start a container from this image , /home/app will be created inside of the container, and not on the host	"RUN any Linux command executed inside of the container"
+COPY . /home/app		//copy files that I have on my host inside of that container image (directory /home/app) "COPY command Linux to execute on the host"
+CMD ["node","/home/app/server.js"] 	//execute an entry point, translate to node server.js for run the server inside the container	//CMD is entrypoint command
+
+---------------Build image from this Dockerfile:
+docker build -t my-app:1.0 .		//myapp:1.0 (name and version of image) /	.  (location of our Dockerfile = current directory)
+if you adjust Dockerfile you must remove and rebuid the image (or rebuild it with another version --tag) 	//first,delete container -> docker rm idContainer	,	//delete image -> docker rmi idImage	,	and rebuild it -> docker build...
+*Run the docker image -> docker run my-app:1.0  
+//if I have a huge application , I would compress them and package them into an artifact then copy that artifact into a docker image container
+//we would start this container (application) from a docker compose as well ,together with all the other docker images that the application uses , specfiying also ports....
+ 
+---------------Private docker repository
+//One image per repository , but we can have one image with different tag
+create a private repository for docker (Docker registry) on aws
+1- you always have to login to private repo =docker login
+	execute a login command	+ preRequisites (AWS CLI installed + Credentiels configured)
+2- Tag the image = renaming our image to the repository domain (aws command)
+3- docker push fullRegistryDomainOfTheRepository:tag
+
+*Même si j'ai utilisé jenkins server pour pusher l'image vers docker repository. Jenkins aussi doit avoir des informations d'identification au private repo
+
+--------------Deploy our containerized app :
+We use docker compose to deploy the application
+we have logged into development server , and we want to run our image that we just pushed into private repo (my-app , mongo , mongo-express) on the development server  
++The server needs to login to pull from private repository before we execute the docker compose . However login not needed for public dockerHub
++the environment where we execute this docker compose has to be logged into a docker repository 
++This docker file would be used on the server to deploy all the applications/services 
+*On the server we need to :
+	- docker login ...cmd aws
+	- create ongo.yaml (docker compose)
+	- execute this docker compose file (docker-compose -f mongo.yaml up)
+	- change the path of database localhost to name of the container mentioned on service inside mongo.yaml = "mongodb" , I have to delete port of mongodb 
+		when I add name of container because hostname and port number in the configuration "mongo.yaml" . So the app is connected to mongodb using service name
+
+
+--------------Docker volumes
+How to preserve the database when the container restarts removes using docker volumes
++we plug a physical file system , could be a folder , a directory,into the container (virtual file system)
++Named volume :
+(in docker compose) -> 
+	version: '3' 
+	service:     
+	     mogodb:
+  		image:
+  		ports:
+  		volumes:
+   		  - db-data: /var/lib/mysql/data	(db-data : reference name -host volume name , /var......... : path in the container where data is persisted ,it changes, it depends on the type of database container , for example mongodb container has /data/db)	
+	     mongo-express:
+		image:	
+	volumes:
+	     db-data:
+		driver:local	//additional info for docker to create a physical storage on a local file system
+
+------------------------------
+Docker volume locations on host/local machine : (example : db-data)
+	- windows : C:\ProgramData\docker\volumes
+	- linux : /var/lib/docker/volumes
+	- mac : /var/lib/docker/volumes
+
+
+
+
+
+
+
